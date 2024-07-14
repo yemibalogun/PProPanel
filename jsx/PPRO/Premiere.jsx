@@ -470,6 +470,66 @@ $._PPP_={
 		}
 	},
 
+	
+	// Function to find or create the "Main folder" bin
+	findOrCreateMainFolder : function() {
+		var projectRoot = app.project.rootItem;
+		var mainFolder = null;
+		
+		// Search for "Main folder" in the project
+		for (var i = 0; i < projectRoot.children.numItems; i++) {
+			var child = projectRoot.children[i];
+			if (child.type === ProjectItemType.BIN && child.name === "Main folder") {
+				mainFolder = child;
+				break;
+			}
+		}
+		
+		// If "Main folder" doesn't exist, create it
+		if (!mainFolder) {
+			mainFolder = projectRoot.createBin("Main folder");
+		}
+		
+		return mainFolder;
+	},	
+
+	// Function to import a folder and its contents
+	importFolder : function(folderPath, parentItem) {
+		var folder = new Folder(folderPath);
+
+		// Get all files in the folder
+		var files = folder.getFiles();
+    
+		for (var i = 0; i < files.length; i++) {
+			var file = files[i];
+			
+			if (file instanceof Folder) {
+				// If it's a subfolder, create a new bin for the subfolder's contents
+				var subFolderBin = parentItem.createBin(file.name);
+
+				// Recursively import contents of the subfolder
+				this.importFolder(file.fsName, subFolderBin);
+			} else {
+				// If it's a file, import it into the current bin
+				app.project.importFiles([file.fsName], false, parentItem, false);
+			}
+		}
+	},
+
+	// Main function to start the import process
+	importFolderStructure : function() {
+		// Prompt user to select the root folder to import
+		var rootFolder = Folder.selectDialog("Select the root folder to import");
+		
+		if (rootFolder != null) {
+			// Find or create the "Main folder" bin
+			var mainFolder = this.findOrCreateMainFolder();
+			
+			// Start importing from the selected folder into the "Main folder"
+			this.importFolder(rootFolder.fsName, mainFolder);
+		}
+	},
+
 	muteFun : function () {
 		if (app.project.activeSequence) {
 			for (var i = 0; i < app.project.activeSequence.audioTracks.numTracks; i++) {
