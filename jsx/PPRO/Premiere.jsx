@@ -499,6 +499,8 @@ $._PPP_={
 
 		// Get all files in the folder
 		var files = folder.getFiles();
+		var mp4File = null;
+		var pngFile = null;
     
 		for (var i = 0; i < files.length; i++) {
 			var file = files[i];
@@ -510,11 +512,37 @@ $._PPP_={
 				// Recursively import contents of the subfolder
 				this.importFolder(file.fsName, subFolderBin);
 			} else {
-				// If it's a file, import it into the current bin
+				// Determin file type
+				if (file.name.match(/\.mp4$/i)) {
+					mp4File = file;
+				} else if (file.name.match(/\.png$/i)) {
+					pngFile = file;
+				}
+
+				// Import the file into the current bin
 				app.project.importFiles([file.fsName], false, parentItem, false);
 			}
 		}
+
+		// If both files are found, proceed with the next steps
+		if (mp4File && pngFile) {
+			this.processFolder(folder.name, mp4File, pngFile);
+		}
 	},
+
+	// Function to process each folder
+	processFolder: function(folderName, mp4File, pngFile) {
+		// Replace the title in the sequence "Add Name Company"
+		this.replaceTitleInSequence("Add Name Company", folderName);
+
+		// Replace the screenshot in the sequence "Add Screenshot indeed" and resize it
+		this.replaceScreenshotInSequence("Add Screenshot indeed", pngFile.fsName);
+	},
+
+	// Function to replace the title in a seqnence
+	replaceTitleInSequence: function(sequenceName, newTitle) {
+		var sequence = app.findSeqneceByName(sequenceName);
+	}
 
 	// Main function to start the import process
 	importFolderStructure : function() {
