@@ -494,7 +494,7 @@ $._PPP_={
 	},	
 
 	// Function to import a folder and its contents
-	importFolder : function(folderPath, parentItem) {
+	importFolder : function(folderPath, parentItem, importedFolders) {
 		var folder = new Folder(folderPath);
 
 		// Get all files in the folder
@@ -510,9 +510,9 @@ $._PPP_={
 				var subFolderBin = parentItem.createBin(file.name);
 
 				// Recursively import contents of the subfolder
-				this.importFolder(file.fsName, subFolderBin);
+				this.importFolder(file.fsName, subFolderBin, importedFolders);
 			} else {
-				// Determin file type
+				// Determine file type
 				if (file.name.match(/\.mp4$/i)) {
 					mp4File = file;
 				} else if (file.name.match(/\.png$/i)) {
@@ -526,12 +526,20 @@ $._PPP_={
 
 		// If both files are found, proceed with the next steps
 		if (mp4File && pngFile) {
-			this.processFolder(folder.name, mp4File, pngFile);
+			importedFolders.push({
+				folderName: folder.name,
+				mp4File: mp4File,
+				pngFile: pngFile
+			});
 		}
 	},
 
 	// Function to process each folder
-	processFolder: function(folderName, mp4File, pngFile) {
+	processFolder: function(folder) {
+		var folderName = folder.folderName;
+		var mp4File = folder.mp4File;
+		var pngFile = folder.pngFile;
+
 		// Replace the title in the sequence "Add Name Company"
 		this.replaceTitleInSequence("Add Name Company", folderName);
 
@@ -541,8 +549,33 @@ $._PPP_={
 
 	// Function to replace the title in a seqnence
 	replaceTitleInSequence: function(sequenceName, newTitle) {
-		var sequence = app.findSeqneceByName(sequenceName);
-	}
+		var sequence = this.findSequenceByName(sequenceName);
+		if (sequence) {
+			var titleItem = this.findTitleItemInSequence(sequence);
+			if (titleItem) {
+				// Assuming titleItem has a method to change the text
+				titleItem.setText(newTitle)
+			}
+		}
+	},
+
+	// Function to replace the screenshot in a sequence
+	replaceScreenshotInSequence: function(sequenceName, screenshotPath) {
+		var sequence = this.findSequenceByName(sequenceName);
+		if (sequence) {
+			var screenshotItem = this.findScreenshotItemInSequence(sequence);
+			if (screenshotItem) {
+				screenshotItem.replaceWith(screenshotPath);
+				this.resizeItem(screenshotItem, 1920, 1080)
+			}
+		}
+	},
+
+	// Function to resize aqn item 
+	resizeItem: function(item, width, height) {
+		// Assuming item has methods to set the scale 
+		item.setScaleToFit(width, height);
+	},
 
 	// Main function to start the import process
 	importFolderStructure : function() {
@@ -552,10 +585,61 @@ $._PPP_={
 		if (rootFolder != null) {
 			// Find or create the "Main folder" bin
 			var mainFolder = this.findOrCreateMainFolder();
+
+			// Array to store imported folder details
+			var importedFolders = [];
 			
 			// Start importing from the selected folder into the "Main folder"
-			this.importFolder(rootFolder.fsName, mainFolder);
+			this.importFolder(rootFolder.fsName, mainFolder, importedFolders);
+
+			// Store imported folder details for later processing 
+			this.importedFolders = importedFolders;
 		}
+	},
+
+	// Function to start the processing of imported folders 
+	processImportedFolders : function() {
+		if (this.importedFolders && this.importedFolders.length > 0) {
+			for (var i = 0; i < this.importedFolders.length; i++) {
+				this.processFolder(this.importedFolders[i]);
+			}
+		}
+	},
+
+	// Helper functions to find sequences and items in sequences
+	findSequenceByName: function(name) {
+		for (var i = 0; i < app.project.sequences.numSequences; i++) {
+			if (app.project.sequences[i].name === name) {
+				return app.project.sequences[i];
+			}
+		}
+		return null;
+	},
+
+	findTitleItemInSequence: function(sequence) {
+		for (var i = 0; i < sequence.videoTracks.numTracks; i++) {
+			var track = sequence.videoTracks[i];
+			for (var j = 0; j < track.clips.numItems; j++) {
+				var clip = track.clips[j];
+				if (clip.name.match(/Title/i)) {
+					return clip;
+				}
+			}
+		}
+		return null;
+	},
+
+	findScreenshotItemInSequence: function(sequence) {
+		for (var i = 0; i < sequence.videoTracks.numTracks; i++) {
+			var track = sequence.videoTracks[i];
+			for (var j = 0; j < track.clips.numItems; j++) {
+				var clip = track.clips[j];
+				if (clip.name.match(/Screenshot/i)) {
+					return clip;
+				}
+			}
+		}
+		return null;
 	},
 
 	muteFun : function () {
