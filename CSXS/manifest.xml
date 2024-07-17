@@ -38,7 +38,7 @@ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 				</Lifecycle>
 				<UI>
 					<Type>Panel</Type>
-					<Menu> Yosi's Script</Menu>
+					<Menu>Yosi's Script</Menu>
 					<Geometry>
 						<Size>
 							<Height>300</Height>
