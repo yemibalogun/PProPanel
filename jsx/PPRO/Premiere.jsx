@@ -441,6 +441,22 @@ $._PPP_={
 		return deepSearchBin(app.project.rootItem);
 	},
 
+	serialize : function (obj) {
+		var str = '';
+		for (var key in obj) {
+			if (obj.hasOwnProperty(key)) {
+				var value = obj[key];
+				if (value && typeof value === 'object') {
+					str += key + ': ' + this.serialize(value) + ', ';
+				} else {
+					str += key + ': ' + value + ', ';
+				}
+			}
+		}
+		return str.slice(0, -2); // Remove the last comma and space
+	},
+	
+
 	importFiles : function () {
 		var filterString = "";
 		if (Folder.fs === 'Windows') {
@@ -510,45 +526,151 @@ $._PPP_={
 
 	},
 
-    importFolder: function(folderPath, parentItem, importedFolders) {
-        var folder = new Folder(folderPath);
-        var files = folder.getFiles();
-        var mp4File = null;
-        var pngFile = null;
-
-        for (var i = 0; i < files.length; i++) {
-            var file = files[i];
-
-            if (file instanceof Folder) {
-                // If it's a subfolder, create a new bin for the subfolder's contents
-                var subFolderBin = parentItem.createBin(file.name);
-
-                // Recursively import contents of the subfolder
-                this.importFolder(file.fsName, subFolderBin, importedFolders);
-            } else {
-                // Determine file type
-                if (file.name.match(/\.mp4$/i)) {
-                    mp4File = file;
-                } else if (file.name.match(/\.png$/i)) {
-                    pngFile = file;
-                }
-
-                // Import the file into the current bin
-                app.project.importFiles([file.fsName], false, parentItem, false);
+    
+    replaceTitleInSequence: function(sequenceName, newTitle) {
+        var sequence = this.findSequenceByName(sequenceName);
+        if (sequence) {
+            var titleItem = this.findTitleItemInSequence(sequence);
+            if (titleItem) {
+                // Assuming titleItem has a method to change the text
+                titleItem.setText(newTitle);
             }
-        }
-
-        // If both files are found, proceed with the next steps
-        if (mp4File && pngFile) {
-            importedFolders.push({
-                folderName: folder.name,
-                mp4File: mp4File,
-                pngFile: pngFile
-            });
         }
     },
 
-    processFolder: function(folder) {
+    replaceScreenshotInSequence: function(sequenceName, screenshotPath) {
+		var sequence = this.findSequenceByName(sequenceName);
+		if (sequence) {
+			var screenshotItem = this.findScreenshotItemInSequence(sequence);
+			if (screenshotItem) {
+				var screenshotFile = new File(screenshotPath);
+				if (screenshotFile.exists) {
+					screenshotItem.setFile(screenshotFile);
+					this.resizeItem(screenshotItem, 1920, 1080);
+					$.writeln('Screenshot replaced and resized in sequence: ' + sequenceName);
+				} else {
+					$.writeln('Screenshot file does not exist: ' + screenshotPath);
+				}
+			} else {
+				$.writeln('Screenshot item not found in sequence: ' + sequenceName);
+			}
+		} else {
+			$.writeln('Sequence not found: ' + sequenceName);
+		}
+	},
+	
+
+    replaceVideoInSequence: function(sequenceName, videoPath) {
+        var sequence = this.findSequenceByName(sequenceName);
+        if (sequence) {
+            var videoItem = this.findVideoItemInSequence(sequence);
+            if (videoItem) {
+                videoItem.replaceWith(videoPath);
+            }
+        }
+    },
+
+    resizeItem: function(item, width, height) {
+        // Assuming item has methods to set the scale
+        item.setScaleToFit(width, height);
+    },	
+
+    importFolderStructure: function() {
+		$.writeln('Starting importFolderStructure');
+        var rootFolder = Folder.selectDialog("Select the root folder to import");
+
+        if (rootFolder != null) {
+            var mainFolder = this.findOrCreateMainFolder();
+            var importedFolders = [];
+
+			// Add debug statement before importFoder call
+			$.writeln('Calling importFolder with rootFolder: ' + rootFolder.fsName);
+            this.importFolder(rootFolder.fsName, mainFolder, importedFolders);
+
+			// Debug: Log the imported folders array
+			$.writeln('imported Folders: ' + this.serialize(importedFolders));
+
+            this.importedFolders = importedFolders;
+
+			// Debug: Log the this.importedFolders to ensure it's assigned
+			$.writeln('this.importedFolders: ' + this.serialize(this.importedFolders));
+		}
+
+		$.writeln('Finished importFolderStructure');
+			
+	},
+
+	importFolder: function(folderPath, parentItem, importedFolders) {
+		$.writeln('Importing folder: ' + folderPath);
+		var folder = new Folder(folderPath);
+		var files = folder.getFiles();
+		var mp4File = null;
+		var pngFile = null;
+	
+		$.writeln('Number of files and folders in ' + folderPath + ': ' + files.length);
+	
+		for (var i = 0; i < files.length; i++) {
+			var file = files[i];
+	
+			if (file instanceof Folder) {
+				$.writeln('Found subfolder: ' + file.name);
+				// If it's a subfolder, create a new bin for the subfolder's contents
+				var subFolderBin = parentItem.createBin(file.name);
+	
+				// Recursively import contents of the subfolder
+				this.importFolder(file.fsName, subFolderBin, importedFolders);
+			} else {
+				$.writeln('Found file: ' + file.name);
+				// Determine file type
+				if (file.name.match(/\.mp4$/i)) {
+					mp4File = file;
+				} else if (file.name.match(/\.png$/i)) {
+					pngFile = file;
+				}
+	
+				// Import the file into the current bin
+				app.project.importFiles([file.fsName], false, parentItem, false);
+			}
+		}
+	
+		// If both files are found, proceed with the next steps
+		if (mp4File && pngFile) {
+			importedFolders.push({
+				folderName: folder.name,
+				mp4File: mp4File,
+				pngFile: pngFile
+			});
+	
+			// Debug: Log the folder details
+			$.writeln('Imported folder details: ' + this.serialize(importedFolders[importedFolders.length - 1]));
+		}
+	},
+	
+    processImportedFolders: function() {
+		$.writeln('Starting processImportedFolders');
+
+		// Check if this.importedFolders is defined and has items
+		if (this.importedFolders && this.importedFolders.length > 0) {
+			$.writeln('Number of imported folders: ' + this.importedFolders.length);
+
+			// Iterate over each imported folder
+			for (var i = 0; i < this.importedFolders.length; i++) {
+				var importedFolder = this.importedFolders[i];
+
+				// Debug: Log the details of the folder being processed
+				$.writeln('Processing folder: ' + this.serialize(importedFolder));
+
+				// Process the folder
+				this.processFolder(importedFolder);
+			}
+		} else {
+			$.writeln('No imported folders found or importedFolders array is empty.');
+		}
+
+		$.writeln('Finished processImportedFolders');
+	},
+
+	processFolder: function(folder) {
 		var folderName = folder.folderName;
 		var mp4File = folder.mp4File;
 		var pngFile = folder.pngFile;
@@ -574,7 +696,7 @@ $._PPP_={
 						case "Add Screenshot indeed":
 							var screenshotItem = this.findScreenshotItemInSequence(sequence);
 							if (screenshotItem && pngFile) {
-								screenshotItem.replaceWith(pngFile.fsName);
+								screenshotItem.projectItem.replaceWith(pngFile.fsName);
 								this.resizeItem(screenshotItem, 1920, 1080);
 								$.writeln('Screenshot replaced and resized in sequence: ' + sequenceName);
 							} else {
@@ -589,7 +711,7 @@ $._PPP_={
 						case "Add Facebook Recording":
 							var videoItem = this.findVideoItemInSequence(sequence);
 							if (videoItem && mp4File) {
-								videoItem.replaceWith(mp4File.fsName);
+								videoItem.projectItem.replaceWith(mp4File.fsName);
 								$.writeln('Video replaced in sequence: ' + sequenceName);
 							} else {
 								if (!videoItem) {
@@ -609,76 +731,6 @@ $._PPP_={
 			}
 		} catch (error) {
 			$.writeln('Error processing folder: ' + error);
-		}
-	},
-
-    replaceTitleInSequence: function(sequenceName, newTitle) {
-        var sequence = this.findSequenceByName(sequenceName);
-        if (sequence) {
-            var titleItem = this.findTitleItemInSequence(sequence);
-            if (titleItem) {
-                // Assuming titleItem has a method to change the text
-                titleItem.setText(newTitle);
-            }
-        }
-    },
-
-    replaceScreenshotInSequence: function(sequenceName, screenshotPath) {
-        var sequence = this.findSequenceByName(sequenceName);
-        if (sequence) {
-            var screenshotItem = this.findScreenshotItemInSequence(sequence);
-            if (screenshotItem) {
-                screenshotItem.replaceWith(screenshotPath);
-                this.resizeItem(screenshotItem, 1920, 1080);
-            }
-        }
-    },
-
-    replaceVideoInSequence: function(sequenceName, videoPath) {
-        var sequence = this.findSequenceByName(sequenceName);
-        if (sequence) {
-            var videoItem = this.findVideoItemInSequence(sequence);
-            if (videoItem) {
-                videoItem.replaceWith(videoPath);
-            }
-        }
-    },
-
-    resizeItem: function(item, width, height) {
-        // Assuming item has methods to set the scale
-        item.setScaleToFit(width, height);
-    },
-
-    importFolderStructure: function() {
-        var rootFolder = Folder.selectDialog("Select the root folder to import");
-
-        if (rootFolder != null) {
-            var mainFolder = this.findOrCreateMainFolder();
-            var importedFolders = [];
-
-            this.importFolder(rootFolder.fsName, mainFolder, importedFolders);
-
-            this.importedFolders = importedFolders;
-
-			// Log importedFolders to check its contents
-			var logString = 'importedFolders: [';
-			for (var i = 0; i < importedFolders.length; i++) {
-				logString += '{ folderName: "' + importedFolders[i].folderName + '", mp4File: "' + importedFolders[i].mp4File.fsName + '", pngFile: "' + importedFolders[i].pngFile.fsName + '" }, ';
-			}
-			logString += ']';
-
-			$.writeln(logString);
-		}
-    },
-
-    processImportedFolders: function() {
-		if (this.importedFolders && this.importedFolders.length > 0) {
-			for (var i = 0; i < this.importedFolders.length; i++) {
-				var importedFolder = this.importedFolders[i];
-				this.processFolder(importedFolder);
-			}
-		} else {
-			$.writeln('No imported folders found or importedFolders array is empty.');
 		}
 	},
 
@@ -709,7 +761,7 @@ $._PPP_={
             var track = sequence.videoTracks[i];
             for (var j = 0; j < track.clips.numItems; j++) {
                 var clip = track.clips[j];
-                if (clip.name.match(/Screenshot/i)) {
+                if (clip.projectItem && clip.projectItem.getMediaPath().match(/\.png$/i)) {
                     return clip;
                 }
             }
@@ -722,7 +774,7 @@ $._PPP_={
             var track = sequence.videoTracks[i];
             for (var j = 0; j < track.clips.numItems; j++) {
                 var clip = track.clips[j];
-                if (clip.name.match(/Video/i)) {
+                if (clip.projectItem && clip.projectItem.getMediaPath().match(/\.mp4$/i)) {
                     return clip;
                 }
             }
